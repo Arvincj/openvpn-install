@@ -116,13 +116,15 @@ if [[ ! -e /etc/openvpn/server/server.conf ]]; then
 		echo
 		echo "Which IPv4 address should be used?"
 		ip -4 addr | grep inet | grep -vE '127(\.[0-9]{1,3}){3}' | cut -d '/' -f 1 | grep -oE '[0-9]{1,3}(\.[0-9]{1,3}){3}' | nl -s ') '
-		read -p "IPv4 address [1]: " ip_number
-		until [[ -z "$ip_number" || "$ip_number" =~ ^[0-9]+$ && "$ip_number" -le "$number_of_ip" ]]; do
-			echo "$ip_number: invalid selection."
+		if [[ -z "$ip" ]]; then
 			read -p "IPv4 address [1]: " ip_number
-		done
-		[[ -z "$ip_number" ]] && ip_number="1"
-		ip=$(ip -4 addr | grep inet | grep -vE '127(\.[0-9]{1,3}){3}' | cut -d '/' -f 1 | grep -oE '[0-9]{1,3}(\.[0-9]{1,3}){3}' | sed -n "$ip_number"p)
+			until [[ -z "$ip_number" || "$ip_number" =~ ^[0-9]+$ && "$ip_number" -le "$number_of_ip" ]]; do
+				echo "$ip_number: invalid selection."
+				read -p "IPv4 address [1]: " ip_number
+			done
+			[[ -z "$ip_number" ]] && ip_number="1"
+			ip=$(ip -4 addr | grep inet | grep -vE '127(\.[0-9]{1,3}){3}' | cut -d '/' -f 1 | grep -oE '[0-9]{1,3}(\.[0-9]{1,3}){3}' | sed -n "$ip_number"p)
+		fi
 	fi
 	# If $ip is a private IP address, the server must be behind NAT
 	if echo "$ip" | grep -qE '^(10\.|172\.1[6789]\.|172\.2[0-9]\.|172\.3[01]\.|192\.168)'; then
@@ -160,27 +162,31 @@ if [[ ! -e /etc/openvpn/server/server.conf ]]; then
 	echo "Which protocol should OpenVPN use?"
 	echo "   1) UDP (recommended)"
 	echo "   2) TCP"
-	read -p "Protocol [1]: " protocol
-	until [[ -z "$protocol" || "$protocol" =~ ^[12]$ ]]; do
-		echo "$protocol: invalid selection."
+	if [[ -z "$protocol" ]]; then
 		read -p "Protocol [1]: " protocol
-	done
+		until [[ -z "$protocol" || "$protocol" =~ ^[12]$ ]]; do
+			echo "$protocol: invalid selection."
+			read -p "Protocol [1]: " protocol
+		done
+	fi
 	case "$protocol" in
-		1|"") 
+		1|"udp"|"")
 		protocol=udp
 		;;
-		2) 
+		2|"tcp")
 		protocol=tcp
 		;;
 	esac
 	echo
 	echo "What port should OpenVPN listen to?"
-	read -p "Port [1194]: " port
-	until [[ -z "$port" || "$port" =~ ^[0-9]+$ && "$port" -le 65535 ]]; do
-		echo "$port: invalid port."
+	if [[ -z "$port" ]]; then
 		read -p "Port [1194]: " port
-	done
-	[[ -z "$port" ]] && port="1194"
+		until [[ -z "$port" || "$port" =~ ^[0-9]+$ && "$port" -le 65535 ]]; do
+			echo "$port: invalid port."
+			read -p "Port [1194]: " port
+		done
+		[[ -z "$port" ]] && port="1194"
+	fi
 	echo
 	echo "Select a DNS server for the clients:"
 	echo "   1) Current system resolvers"
@@ -189,17 +195,21 @@ if [[ ! -e /etc/openvpn/server/server.conf ]]; then
 	echo "   4) OpenDNS"
 	echo "   5) Quad9"
 	echo "   6) AdGuard"
-	read -p "DNS server [1]: " dns
-	until [[ -z "$dns" || "$dns" =~ ^[1-6]$ ]]; do
-		echo "$dns: invalid selection."
+	if [[ -z "$dns" ]]; then
 		read -p "DNS server [1]: " dns
-	done
+		until [[ -z "$dns" || "$dns" =~ ^[1-6]$ ]]; do
+			echo "$dns: invalid selection."
+			read -p "DNS server [1]: " dns
+		done
+	fi
 	echo
 	echo "Enter a name for the first client:"
-	read -p "Name [client]: " unsanitized_client
-	# Allow a limited set of characters to avoid conflicts
-	client=$(sed 's/[^0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-]/_/g' <<< "$unsanitized_client")
-	[[ -z "$client" ]] && client="client"
+	if [[ -z "$client" ]]; then
+		read -p "Name [client]: " unsanitized_client
+		# Allow a limited set of characters to avoid conflicts
+		client=$(sed 's/[^0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-]/_/g' <<< "$unsanitized_client")
+		[[ -z "$client" ]] && client="client"
+	fi
 	echo
 	echo "OpenVPN installation is ready to begin."
 	# Install a firewall if firewalld or iptables are not already available
@@ -214,7 +224,6 @@ if [[ ! -e /etc/openvpn/server/server.conf ]]; then
 			firewall="iptables"
 		fi
 	fi
-	read -n1 -r -p "Press any key to continue..."
 	# If running inside a container, disable LimitNPROC to prevent conflicts
 	if systemd-detect-virt -cq; then
 		mkdir /etc/systemd/system/openvpn-server@server.service.d/ 2>/dev/null
